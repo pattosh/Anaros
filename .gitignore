@@ -74,3 +74,6 @@ Testing/
 # Bazel local overrides
 user.bazelrc
 .cache/bazel-disk/
+
+# dev shell profile
+dev-profile*
