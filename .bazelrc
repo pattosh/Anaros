@@ -1,2 +1,31 @@
+common --enable_bzlmod
+
+build --incompatible_enable_cc_toolchain_resolution
+build --enable_platform_specific_config
+build --disk_cache=~/.cache/bazel-disk/anaros
+
 build --cxxopt=-std=c++26
 build --cxxopt=-freflection
+build --host_cxxopt=-std=c++26
+
+# Propagate nix gcc-wrapper env into Bazel actions so the wrapper embeds
+# /nix/store rpaths and -isystem dirs. Without these, sandboxed link actions
+# produce binaries that can't find libstdc++.so.6 at runtime.
+build --action_env=NIX_CFLAGS_COMPILE
+build --action_env=NIX_LDFLAGS
+build --action_env=NIX_CC_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu=1
+build --action_env=NIX_BINTOOLS_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu=1
+build --host_action_env=NIX_CFLAGS_COMPILE
+build --host_action_env=NIX_LDFLAGS
+build --host_action_env=NIX_CC_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu=1
+build --host_action_env=NIX_BINTOOLS_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu=1
+
+# rules_nixpkgs_cc 0.13.0 defaults to `-fuse-ld=lld`, which sidesteps the nix
+# binutils-wrapper that auto-embeds /nix/store rpaths via the ld-wrapper. Force
+# the default ld so RUNPATH points at the nix-store libstdc++.
+build --linkopt=-fuse-ld=bfd
+build --host_linkopt=-fuse-ld=bfd
+
+test --test_output=errors
+
+try-import %workspace%/user.bazelrc

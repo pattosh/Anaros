@@ -71,5 +71,6 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# Nix
-flake.lock
+# Bazel local overrides
+user.bazelrc
+.cache/bazel-disk/
