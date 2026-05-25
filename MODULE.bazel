@@ -1,0 +1,14 @@
+bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "rules_nixpkgs_core", version = "0.13.0")
+bazel_dep(name = "rules_nixpkgs_cc", version = "0.13.0")
+bazel_dep(name = "yaml-cpp", version = "0.8.0")
+local_path_override(
+    module_name = "yaml-cpp",
+    path = "build/_deps/yaml-cpp-src",
+)
+
+# In a .bzl extension or WORKSPACE
+nixpkgs_cc_configure(
+  repository = "@nixpkgs",
+  nix_file = "//nix:toolchain.nix",
+)
