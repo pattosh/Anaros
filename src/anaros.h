@@ -2,7 +2,9 @@
 
 #include <expected>
 #include <meta>
+#include <optional>
 #include <string>
+#include <type_traits>
 #include <yaml-cpp/yaml.h>
 
 namespace anaros {
@@ -22,28 +24,78 @@ consteval auto get_fields() {
 }
 
 template <typename T>
-std::expected<T, std::string> parse_from_yaml(const YAML::Node& yaml_dict) {
-    T result{};
+struct yaml_traits; // primary left undefined — specialize to opt in
 
-    template for (constexpr auto field : get_fields<T>()) {
-        constexpr auto name = std::meta::identifier_of(field);
+template <typename T>
+concept HasYamlTraits = requires(const YAML::Node& n) {
+    { yaml_traits<T>::parse(n) } -> std::same_as<std::expected<T, std::string>>;
+};
 
-        // Alias the field type to avoid parser ambiguity in template argument
-        using FieldType = typename[:std::meta::type_of(field):];
+namespace detail {
 
-        if (!yaml_dict[name]) {
-            return std::unexpected(std::string("Missing field: ") + std::string(name));
-        }
+template <typename>
+struct is_optional : std::false_type {};
 
+template <typename U>
+struct is_optional<std::optional<U>> : std::true_type {
+    using value_type = U;
+};
+
+template <typename U>
+std::expected<U, std::string> parse_value(const YAML::Node& n) {
+    if constexpr (HasYamlTraits<U>) {
+        return yaml_traits<U>::parse(n);
+    } else {
         try {
-            result.[:field:] = yaml_dict[name].template as<FieldType>();
+            return n.template as<U>();
         } catch (const YAML::Exception& e) {
-            return std::unexpected(std::string("Failed to parse field '") + std::string(name) +
-                                   "': " + e.what());
+            return std::unexpected(std::string(e.what()));
         }
     }
+}
 
-    return result;
+} // namespace detail
+
+template <typename T>
+std::expected<T, std::string> parse_from_yaml(const YAML::Node& yaml_dict) {
+    if constexpr (HasYamlTraits<T>) {
+        return yaml_traits<T>::parse(yaml_dict);
+    } else {
+        T result{};
+
+        template for (constexpr auto field : get_fields<T>()) {
+            constexpr auto name = std::meta::identifier_of(field);
+            using FieldType = typename[:std::meta::type_of(field):];
+
+            auto sub = yaml_dict[name];
+            if (!sub) {
+                if constexpr (detail::is_optional<FieldType>::value) {
+                    continue;
+                } else if constexpr (std::meta::has_default_member_initializer(field)) {
+                    continue;
+                } else {
+                    return std::unexpected(std::string("Missing field: ") + std::string(name));
+                }
+            } else if constexpr (detail::is_optional<FieldType>::value) {
+                using Inner = typename detail::is_optional<FieldType>::value_type;
+                auto r = detail::parse_value<Inner>(sub);
+                if (!r) {
+                    return std::unexpected(std::string("Failed to parse field '") +
+                                           std::string(name) + "': " + r.error());
+                }
+                result.[:field:] = *std::move(r);
+            } else {
+                auto r = detail::parse_value<FieldType>(sub);
+                if (!r) {
+                    return std::unexpected(std::string("Failed to parse field '") +
+                                           std::string(name) + "': " + r.error());
+                }
+                result.[:field:] = *std::move(r);
+            }
+        }
+
+        return result;
+    }
 }
 
 } // namespace anaros
