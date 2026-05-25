@@ -3,6 +3,8 @@
 A C++26 header-only library that uses P2996 static reflection to automatically
 serialize and deserialize structs to YAML. Requires GCC 16 with `-freflection`.
 
+[![CI](https://github.com/pattosh/Anaros/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/pattosh/Anaros/actions/workflows/ci.yml)
+
 With Anaros, the struct is the schema. Want to add a new string field to your YAML schema?
 Simply add a new `std::string` member to your struct and Anaros will automatically generate
 serialization and de-serialization code for it.
