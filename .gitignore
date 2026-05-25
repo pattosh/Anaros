@@ -44,6 +44,9 @@ build/
 Build/
 build-*/
 
+# Bazel output directories
+bazel-*/
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
@@ -67,3 +70,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Bazel local overrides
+user.bazelrc
+.cache/bazel-disk/

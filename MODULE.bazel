@@ -1,0 +1,26 @@
+module(
+    name = "anaros",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.0.17")
+bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "bazel_skylib", version = "1.5.0")
+bazel_dep(name = "rules_nixpkgs_core", version = "0.13.0")
+bazel_dep(name = "rules_nixpkgs_cc", version = "0.13.0")
+bazel_dep(name = "googletest", version = "1.15.2")
+
+# rules_nixpkgs_cc isn't in BCR; pull it from the upstream repo's subdirectory.
+archive_override(
+    module_name = "rules_nixpkgs_cc",
+    urls = ["https://github.com/tweag/rules_nixpkgs/archive/refs/tags/v0.13.0.tar.gz"],
+    strip_prefix = "rules_nixpkgs-0.13.0/toolchains/cc",
+    integrity = "sha256-DfvHGOim5LN2uURaH43OkzDTld0aU95uMsqbbG6laGA=",
+)
+
+bazel_dep(name = "hedron_compile_commands", version = "0.0.0", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
+    commit = "abb61a688167623088f8768cc9264798df6a9d10",
+)
