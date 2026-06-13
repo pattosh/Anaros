@@ -27,8 +27,13 @@ template <typename T>
 struct yaml_traits; // primary left undefined — specialize to opt in
 
 template <typename T>
-concept HasYamlTraits = requires(const YAML::Node& n) {
+concept HasYamlParse = requires(const YAML::Node& n) {
     { yaml_traits<T>::parse(n) } -> std::same_as<std::expected<T, std::string>>;
+};
+
+template <typename T>
+concept HasYamlDump = requires(const T& v) {
+    { yaml_traits<T>::dump(v) } -> std::same_as<YAML::Node>;
 };
 
 namespace detail {
@@ -43,7 +48,7 @@ struct is_optional<std::optional<U>> : std::true_type {
 
 template <typename U>
 std::expected<U, std::string> parse_value(const YAML::Node& n) {
-    if constexpr (HasYamlTraits<U>) {
+    if constexpr (HasYamlParse<U>) {
         return yaml_traits<U>::parse(n);
     } else {
         try {
@@ -54,11 +59,20 @@ std::expected<U, std::string> parse_value(const YAML::Node& n) {
     }
 }
 
+template <typename U>
+YAML::Node emit_value(const U& v) {
+    if constexpr (HasYamlDump<U>) {
+        return yaml_traits<U>::dump(v);
+    } else {
+        return YAML::Node(v);
+    }
+}
+
 } // namespace detail
 
 template <typename T>
 std::expected<T, std::string> parse_from_yaml(const YAML::Node& yaml_dict) {
-    if constexpr (HasYamlTraits<T>) {
+    if constexpr (HasYamlParse<T>) {
         return yaml_traits<T>::parse(yaml_dict);
     } else {
         T result{};
@@ -95,6 +109,32 @@ std::expected<T, std::string> parse_from_yaml(const YAML::Node& yaml_dict) {
         }
 
         return result;
+    }
+}
+
+template <typename T>
+YAML::Node to_yaml(const T& value) {
+    if constexpr (HasYamlDump<T>) {
+        return yaml_traits<T>::dump(value);
+    } else {
+        YAML::Node node(YAML::NodeType::Map);
+
+        template for (constexpr auto field : get_fields<T>()) {
+            constexpr auto name = std::meta::identifier_of(field);
+            using FieldType = typename[:std::meta::type_of(field):];
+
+            if constexpr (detail::is_optional<FieldType>::value) {
+                if (value.[:field:].has_value()) {
+                    using Inner = typename detail::is_optional<FieldType>::value_type;
+                    node[std::string(name)] = detail::emit_value<Inner>(*value.[:field:]);
+                }
+                // absent optional -> field omitted, symmetric with parse_from_yaml
+            } else {
+                node[std::string(name)] = detail::emit_value<FieldType>(value.[:field:]);
+            }
+        }
+
+        return node;
     }
 }
 
