@@ -75,5 +75,6 @@ Testing/
 user.bazelrc
 .cache/bazel-disk/
 
-# dev shell profile
-dev-profile*
+# Nix dev shell profile (created by `nix develop --profile dev-profile`)
+dev-profile
+dev-profile-*-link

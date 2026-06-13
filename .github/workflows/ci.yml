@@ -6,34 +6,55 @@ on:
   pull_request:
 
 jobs:
-  build:
+  # Detect whether the Nix dev shell definition changed. The dev shell is
+  # defined by the flake plus everything under nix/. Library/source changes do
+  # not affect the shell closure, so they must never trigger a Cachix push.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      devshell: ${{ steps.filter.outputs.devshell }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            devshell:
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'nix/**'
+
+  # Build the dev shell and run every code test underneath it. This runs on all
+  # PRs and pushes. Cachix is pull-only here (skipPush) so nothing is ever
+  # published from a PR — when the shell changed it is built fresh and the tests
+  # confirm there are no regressions; otherwise it is pulled from the cache.
+  build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
+    needs: changes
     steps:
       - uses: actions/checkout@v4
 
       - uses: DeterminateSystems/nix-installer-action@main
 
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-
       - uses: cachix/cachix-action@v15
         with:
           name: anaros
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: true
         continue-on-error: true
 
-      - name: Build and push dev shell closure to Cachix
-        continue-on-error: true
-        run: |
-          nix develop --profile ./dev-profile --command true
-          nix path-info --recursive ./dev-profile | cachix push anaros
+      - name: Build dev shell
+        run: nix develop --profile dev-profile --command true
 
       - name: Bazel build + test
-        run: nix develop --command bazel test //...
+        run: nix develop --profile dev-profile --command bazel test //...
 
       - name: CMake build + test
         run: |
-          nix develop --command sh -c '
+          nix develop --profile dev-profile --command sh -c '
             cmake -S . -B build -G Ninja -DBUILD_TESTING=ON &&
             cmake --build build &&
             ctest --test-dir build --output-on-failure
@@ -41,6 +62,35 @@ jobs:
 
       - name: clang-format check
         run: |
-          nix develop --command sh -c '
+          nix develop --profile dev-profile --command sh -c '
             find src test -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
           '
+
+  # Publish the dev shell to Cachix. This runs ONLY when the shell definition
+  # changed AND the change has landed on main AND the tests above passed. The
+  # push is scoped to the dev-shell profile closure, so build artifacts are
+  # never uploaded.
+  push-devshell:
+    name: Push dev shell to Cachix
+    runs-on: ubuntu-latest
+    needs: [changes, build-and-test]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.devshell == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: anaros
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: true
+
+      - name: Build dev shell
+        run: nix develop --profile dev-profile --command true
+
+      - name: Push dev shell to Cachix
+        run: cachix push anaros dev-profile
